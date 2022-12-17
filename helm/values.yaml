@@ -1,0 +1,1034 @@
+prefix:
+
+user:
+  create: true
+  email: dqdevops@digital.homeoffice.gov.uk
+  password: replaceme
+
+  ## set this value to an existingSecret name to create the admin user with the password in the secret
+  # existingSecret: sentry-admin-password
+
+  ## set this value to an existingSecretKey which holds the password to be used for sentry admin user default key is `admin-password`
+  # existingSecretKey: admin-password
+
+# this is required on the first installation, as sentry has to be initialized first
+# recommended to set false for updating the helm chart afterwards,
+# as you will have some downtime on each update if it's a hook
+# deploys relay & snuba consumers as post hooks
+asHook: true
+
+global:
+  storageClass: "gp2"
+
+images:
+  sentry:
+    repository: quay.io/ukhomeofficedigital/sentry-sentry
+    tag: latest
+    # pullPolicy: IfNotPresent
+    imagePullSecrets: []
+  snuba:
+    repository: quay.io/ukhomeofficedigital/sentry-snuba
+    tag: latest
+    # repository: getsentry/snuba
+    # tag: Chart.AppVersion
+    # pullPolicy: IfNotPresent
+    imagePullSecrets: []
+  relay:
+    repository: quay.io/ukhomeofficedigital/sentry-relay
+    tag: latest
+    # repository: getsentry/relay
+    # tag: Chart.AppVersion
+    # pullPolicy: IfNotPresent
+    imagePullSecrets: []
+  symbolicator:
+    repository: quay.io/ukhomeofficedigital/sentry-symbolicator
+    tag: latest
+    # repository: getsentry/symbolicator
+    # tag: 0.5.1
+    # pullPolicy: IfNotPresent
+    imagePullSecrets: []
+
+serviceAccount:
+  # serviceAccount.annotations -- Additional Service Account annotations.
+  annotations: {}
+  # serviceAccount.enabled -- If `true`, a custom Service Account will be used.
+  enabled: false
+  # serviceAccount.name -- The base name of the ServiceAccount to use. Will be appended with e.g. `snuba-api` or `web` for the pods accordingly.
+  name: "sentry"
+  # serviceAccount.automountServiceAccountToken -- Automount API credentials for a Service Account.
+  automountServiceAccountToken: true
+
+relay:
+  replicas: 1
+  # args: []
+  mode: managed
+  env:
+    - name: REDIS_PORT
+      value: "6379"
+  probeFailureThreshold: 5
+  probeInitialDelaySeconds: 10
+  probePeriodSeconds: 10
+  probeSuccessThreshold: 1
+  probeTimeoutSeconds: 2
+  resources: {}
+  affinity: {}
+  nodeSelector: {}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  service:
+    annotations: {}
+  # tolerations: []
+  # podLabels: []
+
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+  sidecars: []
+  volumes: []
+  volumeMounts: []
+  init:
+    resources: {}
+    # additionalArgs: []
+    # env: []
+    # volumes: []
+    # volumeMounts: []
+
+geodata:
+  path: ""
+  volumeName: ""
+  mountPath: ""
+
+sentry:
+  # to not generate a sentry-secret, use these 2 values to reference an existing secret
+  # existingSecret: "my-secret"
+  # existingSecretKey: "my-secret-key"
+  singleOrganization: true
+  web:
+    # if using filestore backend filesystem with RWO access, set strategyType to Recreate
+    strategyType: RollingUpdate
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    probeFailureThreshold: 20
+    probeInitialDelaySeconds: 10
+    probePeriodSeconds: 60
+    probeSuccessThreshold: 1
+    probeTimeoutSeconds: 60
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    service:
+      annotations: {}
+    # tolerations: []
+    # podLabels: []
+    # Mount and use custom CA
+    # customCA:
+    #   secretName: custom-ca
+    #   item: ca.crt
+
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 50
+    sidecars: []
+    volumes: []
+    volumeMounts: []
+
+  features:
+    orgSubdomains: false
+    vstsLimitedScopes: true
+
+  worker:
+    replicas: 1
+    # concurrency: 4
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources:
+      limits:
+        cpu: 400m
+        memory: 2Gi
+      requests:
+        cpu: 400m
+        memory: 2Gi
+    affinity: {}
+    nodeSelector: {}
+    # tolerations: []
+    # podLabels: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # it's better to use prometheus adapter and scale based on
+    # the size of the rabbitmq queue
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 50
+    livenessProbe:
+      enabled: false
+      periodSeconds: 60
+      timeoutSeconds: 10
+      failureThreshold: 3
+    sidecars: []
+    volumes: []
+    volumeMounts: []
+
+  ingestConsumer:
+    replicas: 1
+    # concurrency: 4
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # podLabels: []
+    # maxBatchSize: ""
+
+    # it's better to use prometheus adapter and scale based on
+    # the size of the rabbitmq queue
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 3
+      targetCPUUtilizationPercentage: 50
+    sidecars: []
+    volumes: []
+
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+
+  cron:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    # tolerations: []
+    # podLabels: []
+    sidecars: []
+    volumes: []
+    # volumeMounts: []
+
+  subscriptionConsumerEvents:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # podLabels: []
+    # commitBatchSize: 1
+    sidecars: []
+    volumes: []
+    # noStrictOffsetReset: false
+    # volumeMounts: []
+
+  subscriptionConsumerTransactions:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # podLabels: []
+    # commitBatchSize: 1
+    sidecars: []
+    volumes: []
+    # noStrictOffsetReset: false
+    # volumeMounts: []
+
+  postProcessForwardErrors:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # podLabels: []
+    # commitBatchSize: 1
+    sidecars: []
+    volumes: []
+    # volumeMounts: []
+
+  postProcessForwardTransactions:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # podLabels: []
+    # commitBatchSize: 1
+    sidecars: []
+    volumes: []
+    # volumeMounts: []
+
+  cleanup:
+    successfulJobsHistoryLimit: 5
+    failedJobsHistoryLimit: 5
+    activeDeadlineSeconds: 100
+    concurrencyPolicy: Allow
+    enabled: true
+    schedule: "0 0 * * *"
+    days: 90
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    sidecars: []
+    volumes: []
+    # volumeMounts: []
+    serviceAccount: {}
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+
+snuba:
+  api:
+    replicas: 1
+    # set command to ["snuba","api"] if securityContext.runAsUser > 0
+    # see: https://github.com/getsentry/snuba/issues/956
+    command: ["snuba","api"]
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    probeInitialDelaySeconds: 10
+    liveness:
+      timeoutSeconds: 60
+    readiness:
+      timeoutSeconds: 60
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    service:
+      annotations: {}
+    # tolerations: []
+    # podLabels: []
+
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 50
+    sidecars: []
+    volumes: []
+    # volumeMounts: []
+
+  consumer:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+    # maxBatchSize: ""
+    # processes: ""
+    # inputBlockSize: ""
+    # outputBlockSize: ""
+    # maxBatchTimeMs: ""
+    # queuedMaxMessagesKbytes: ""
+    # queuedMinMessages: ""
+
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # volumes:
+    #   - name: dshm
+    #     emptyDir:
+    #       medium: Memory
+
+  outcomesConsumer:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+    maxBatchSize: "3"
+    # processes: ""
+    # inputBlockSize: ""
+    # outputBlockSize: ""
+    # maxBatchTimeMs: ""
+    # queuedMaxMessagesKbytes: ""
+    # queuedMinMessages: ""
+
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # volumes:
+    #   - name: dshm
+    #     emptyDir:
+    #       medium: Memory
+
+  replacer:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    maxBatchSize: "3"
+    # maxBatchTimeMs: ""
+    # queuedMaxMessagesKbytes: ""
+    # queuedMinMessages: ""
+    # volumes: []
+    # volumeMounts: []
+
+  subscriptionConsumerEvents:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # volumes: []
+    # volumeMounts: []
+
+  subscriptionConsumerTransactions:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # volumes: []
+    # volumeMounts: []
+
+  sessionsConsumer:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+    # maxBatchSize: ""
+    # processes: ""
+    # inputBlockSize: ""
+    # outputBlockSize: ""
+    # maxBatchTimeMs: ""
+    # queuedMaxMessagesKbytes: ""
+    # queuedMinMessages: ""
+
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # volumes:
+    #   - name: dshm
+    #     emptyDir:
+    #       medium: Memory
+
+  transactionsConsumer:
+    replicas: 1
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    resources: {}
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # podLabels: []
+    autoOffsetReset: "earliest"
+    # noStrictOffsetReset: false
+    # maxBatchSize: ""
+    # processes: ""
+    # inputBlockSize: ""
+    # outputBlockSize: ""
+    # maxBatchTimeMs: ""
+    # queuedMaxMessagesKbytes: ""
+    # queuedMinMessages: ""
+
+    # volumeMounts:
+    #   - mountPath: /dev/shm
+    #     name: dshm
+    # volumes:
+    #   - name: dshm
+    #     emptyDir:
+    #       medium: Memory
+
+  dbInitJob:
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+
+  migrateJob:
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+
+  cleanupErrors:
+    successfulJobsHistoryLimit: 5
+    activeDeadlineSeconds: 100
+    concurrencyPolicy: Allow
+    enabled: true
+    schedule: "0 * * * *"
+    sidecars: []
+    volumes: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    serviceAccount: {}
+    # volumes: []
+    # volumeMounts: []
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+
+  cleanupTransactions:
+    successfulJobsHistoryLimit: 5
+    failedJobsHistoryLimit: 5
+    activeDeadlineSeconds: 100
+    concurrencyPolicy: Allow
+    enabled: true
+    schedule: "0 * * * *"
+    sidecars: []
+    volumes: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    serviceAccount: {}
+    # volumes: []
+    # volumeMounts: []
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+
+hooks:
+  enabled: true
+  removeOnSuccess: true
+  activeDeadlineSeconds: 100
+  shareProcessNamespace: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+  dbCheck:
+    image:
+      repository: quay.io/ukhomeofficedigital/netcat
+      tag: latest
+      pullPolicy: IfNotPresent
+      imagePullSecrets: []
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    # podLabels: []
+    podAnnotations: {}
+    resources:
+      limits:
+        memory: 64Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # volumes: []
+    # volumeMounts: []
+  dbInit:
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    # podLabels: []
+    podAnnotations: {}
+    resources:
+      limits:
+        memory: 1024Mi
+        cpu: 400m
+      requests:
+        cpu: 400m
+        memory: 1024Mi
+    sidecars: []
+    volumes: []
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+    # tolerations: []
+    # volumes: []
+    # volumeMounts: []
+  snubaInit:
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    # podLabels: []
+    podAnnotations: {}
+    resources:
+      limits:
+        cpu: 400m
+        memory: 1Gi
+      requests:
+        cpu: 400m
+        memory: 1Gi
+    affinity: {}
+    nodeSelector: {}
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+    # tolerations: []
+    # volumes: []
+    # volumeMounts: []
+  snubaMigrate:
+    env:
+      - name: REDIS_PORT
+        value: "6379"
+    # podLabels: []
+    # volumes: []
+    # volumeMounts: []
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+
+system:
+  ## be sure to include the scheme on the url, for example: "https://sentry.example.com"
+  url: ""
+  adminEmail: ""
+  ## This should only be used if you’re installing Sentry behind your company’s firewall.
+  public: false
+  ## This will generate one for you (it's must be given upon updates)
+  # secretKey: "xx"
+
+mail:
+  # For example: smtp
+  backend: dummy
+  useTls: false
+  useSsl: false
+  username: ""
+  password: ""
+  # existingSecret: secret-name
+  ## set existingSecretKey if key name inside existingSecret is different from 'mail-password'
+  # existingSecretKey: secret-key-name
+  port: 25
+  host: ""
+  from: ""
+
+auth:
+  register: true
+
+service:
+  name: sentry
+  type: ClusterIP
+  externalPort: 9000
+  annotations: {}
+  # externalIPs:
+  # - 192.168.0.1
+  # loadBalancerSourceRanges: []
+
+# https://github.com/settings/apps (Create a Github App)
+github: {}
+# github:
+#   appId: "xxxx"
+#   appName: MyAppName
+#   clientId: "xxxxx"
+#   clientSecret: "xxxxx"
+#   privateKey: "-----BEGIN RSA PRIVATE KEY-----\nMIIEpA" !!!! Don't forget a trailing \n
+#   webhookSecret:  "xxxxx`"
+
+# https://developers.google.com/identity/sign-in/web/server-side-flow#step_1_create_a_client_id_and_client_secret
+google: {}
+# google:
+#   clientId:
+#   clientSecret:
+
+slack: {}
+# slack:
+#   clientId:
+#   clientSecret:
+#   signingSecret:
+#   Reference -> https://develop.sentry.dev/integrations/slack/
+
+nginx:
+  enabled: false
+  containerPort: 8080
+  existingServerBlockConfigmap: '{{ template "sentry.fullname" . }}'
+  resources: {}
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    ports:
+      http: 80
+  ## Use this to enable an extra service account
+  # serviceAccount:
+  #   create: false
+  #   name: nginx
+
+ingress:
+  enabled: false
+  # If you are using traefik ingress controller, switch this to 'traefik'
+  # if you are using AWS ALB Ingress controller, switch this to 'aws-alb'
+  # if you are using GKE Ingress controller, switch this to 'gke'
+  regexPathStyle: nginx
+  # If you are using AWS ALB Ingress controller, switch to true if you want activate the http to https redirection.
+  alb:
+    httpRedirect: false
+  # annotations:
+  #   If you are using nginx ingress controller, please use at least those 2 annotations
+  #   kubernetes.io/ingress.class: nginx
+  #   nginx.ingress.kubernetes.io/use-regex: "true"
+  #
+  # hostname:
+  # additionalHostNames: []
+  #
+  # tls:
+  # - secretName:
+  #   hosts:
+
+filestore:
+  # Set to one of filesystem, gcs or s3 as supported by Sentry.
+  backend: filesystem
+
+  filesystem:
+    path: /var/lib/sentry/files
+
+    ## Enable persistence using Persistent Volume Claims
+    ## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+    ##
+    persistence:
+      enabled: true
+      ## database data Persistent Volume Storage Class
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
+      ##   GKE, AWS & OpenStack)
+      ##
+      storageClass: "gp2"
+      accessMode: ReadWriteOnce
+      size: 2Gi
+
+      ## Whether to mount the persistent volume to the Sentry worker and
+      ## cron deployments. This setting needs to be enabled for some advanced
+      ## Sentry features, such as private source maps. If you disable this
+      ## setting, the Sentry workers will not have access to artifacts you upload
+      ## through the web deployment.
+      ## Please note that you may need to change your accessMode to ReadWriteMany
+      ## if you plan on having the web, worker and cron deployments run on
+      ## different nodes.
+      persistentWorkers: false
+
+      ## If existingClaim is specified, no PVC will be created and this claim will
+      ## be used
+      existingClaim: ""
+
+  gcs: {}
+    ## Point this at a pre-configured secret containing a service account. The resulting
+    ## secret will be mounted at /var/run/secrets/google
+    # secretName:
+    # credentialsFile: credentials.json
+  # bucketName:
+
+  ## Currently unconfigured and changing this has no impact on the template configuration.
+  s3: {}
+  #  accessKey:
+  #  secretKey:
+  #  bucketName:
+  #  endpointUrl:
+  #  signature_version:
+  #  region_name:
+  #  default_acl:
+
+config:
+  # No YAML Extension Config Given
+  configYml: {}
+  sentryConfPy: |
+    # No Python Extension Config Given
+  snubaSettingsPy: |
+    # No Python Extension Config Given
+  relay: |
+    # No YAML relay config given
+  web:
+    httpKeepalive: 15
+
+clickhouse:
+  enabled: true
+  clickhouse:
+    image: "quay.io/ukhomeofficedigital/clickouse-server"
+    imageVersion: "latest"
+    imagePullPolicy: Always
+    init:
+      image: "quay.io/ukhomeofficedigital/busybox"
+      imageVersion: "latest"
+    replicas: 1
+    configmap:
+      remote_servers:
+        internal_replication: true
+        replica:
+          backup:
+            enabled: false
+      zookeeper_servers:
+        enabled: true
+        config:
+          - index: "clickhouse"
+            hostTemplate: "{{ .Release.Name }}-zookeeper-clickhouse"
+            port: "2181"
+      users:
+        enabled: false
+        user:
+          # the first user will be used if enabled
+          - name: default
+            config:
+              password: ""
+              networks:
+                - ::/0
+              profile: default
+              quota: default
+    # pod Security Context
+    podSecurityContext:
+      fsGroup: 101
+      runAsNonRoot: true
+      runAsUser: 101
+
+    # Security Context
+    securityContext:
+      runAsNonRoot: true
+      runAsUser: 101
+
+    resources:
+      limits:
+        cpu: 2
+        memory: 4Gi
+      requests:
+        cpu: 1
+        memory: 2Gi
+
+    persistentVolumeClaim:
+      enabled: true
+      dataPersistentVolume:
+        enabled: true
+        storageClassName: "gp2"
+        accessModes:
+          - "ReadWriteOnce"
+        storage: "10Gi"
+#        storage: "30Gi"
+    livenessProbe:
+      enabled: false
+    readinessProbe:
+      enabled: false
+
+# Settings for Zookeeper.
+# See https://github.com/bitnami/charts/tree/master/bitnami/zookeeper
+zookeeper:
+  enabled: true
+  image:
+    registry: quay.io
+    repository: ukhomeofficedigital/clickhouse-zookeeper
+    tag: latest
+  nameOverride: zookeeper-clickhouse
+  replicaCount: 1
+  resources:
+    limits:
+      cpu: 800m
+      memory: 2Gi
+    requests:
+      cpu: 400m
+      memory: 1Gi
+
+# Settings for Kafka.
+# See https://github.com/bitnami/charts/tree/master/bitnami/kafka
+kafka:
+  enabled: true
+  image:
+    registry: quay.io
+    repository: ukhomeofficedigital/sentry-kafka
+    tag: latest
+  replicaCount: 1
+  allowPlaintextListener: true
+  defaultReplicationFactor: 1
+  offsetsTopicReplicationFactor: 1
+  transactionStateLogReplicationFactor: 1
+  transactionStateLogMinIsr: 1
+  # 50 MB
+  maxMessageBytes: "50000000"
+  # 50 MB
+  socketRequestMaxBytes: "50000000"
+
+  resources:
+    limits:
+      cpu: 2
+      memory: 4Gi
+    requests:
+      cpu: 1
+      memory: 2Gi
+
+  service:
+    ports:
+      client: 9092
+
+  zookeeper:
+    enabled: true
+    image:
+      registry: quay.io
+      repository: ukhomeofficedigital/sentry-zookeeper
+      tag: latest
+    resources:
+      limits:
+        cpu: 800m
+        memory: 2Gi
+      requests:
+        cpu: 400m
+        memory: 1Gi
+
+  livenessProbe:
+    enabled: false
+
+  readinessProbe:
+    enabled: false
+
+## This value is only used when kafka.enabled is set to false
+##
+externalKafka:
+  ## Hostname or ip address of external kafka
+  ##
+  # host: "kafka-confluent"
+  port: 9092
+
+sourcemaps:
+  enabled: false
+
+redis:
+  enabled: false
+
+## This value is only used when redis.enabled is set to false
+##
+externalRedis:
+  host: dq-gait-api-data-redis
+#  host: host.docker.internal
+
+postgresql:
+  enabled: false
+
+## This value is only used when postgresql.enabled is set to false
+## Set either externalPostgresql.password or externalPostgresql.existingSecret to configure password
+## externalPostgresql.existingSecret should have a key of 'postgres-password' which holds the password
+externalPostgresql:
+  host: dq-ga-airnav-pg-db-notprod.cptlzykvnlia.eu-west-2.rds.amazonaws.com
+  port: 5432
+  username: root
+  database: sentry
+  existingSecret: dq-ga-airnav-notprod-rds
+  existingSecretKey: password
+#  host: host.docker.internal
+#  port: 5432
+#  username: sentry
+#  database: sentry
+
+rabbitmq:
+  ## If disabled, Redis will be used instead as the broker.
+  enabled: false
+
+memcached:
+  memoryLimit: "2048"
+  maxItemSize: "26214400"
+  args:
+    - "memcached"
+    - "-u memcached"
+    - "-p 11211"
+    - "-v"
+    - "-m $(MEMCACHED_MEMORY_LIMIT)"
+    - "-I $(MEMCACHED_MAX_ITEM_SIZE)"
+  extraEnvVarsCM: "sentry-memcached"
+
+revisionHistoryLimit: 10
+
+# dnsPolicy: "ClusterFirst"
+# dnsConfig:
+#   nameservers: []
+#   searches: []
+#   options: []

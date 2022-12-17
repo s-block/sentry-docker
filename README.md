@@ -46,3 +46,12 @@ exec in to the container and run:
 ```bash
 docker-compose run --rm web createuser
 ```
+
+Deploy with helm:
+=================
+
+```bash
+cd helm
+helm repo add sentry https://sentry-kubernetes.github.io/charts
+helm upgrade dq-sentry sentry/sentry -f values.yaml -n $${KUBE_NAMESPACE} --set dq-sentry.user.password=$${USER_PASSWORD} --debug
+```
