@@ -1,0 +1,35 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: {{ .KUBE_NAMESPACE }}
+  name: sentry-webhooks
+  annotations:
+    environment: {{ .ENV }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: sentry-webhooks
+  template:
+    metadata:
+      labels:
+        name: sentry-webhooks
+    spec:
+      containers:
+        - name: sentry-webhooks
+          image: quay.io/s_block/sentry-webhooks:{{.GITHUB_SHA}}
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "400m"
+            requests:
+              memory: "256Mi"
+              cpu: "400m"
+          ports:
+            - name: http
+              containerPort: 8000

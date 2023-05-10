@@ -1,0 +1,16 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sentry-webhooks
+  namespace: {{ .KUBE_NAMESPACE }}
+spec:
+  podSelector:
+    matchLabels:
+      name: sentry-webhooks
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 8000

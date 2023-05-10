@@ -1,8 +1,8 @@
-prefix:
+prefix: https://sentry.s-block.com
 
 user:
   create: true
-  email: test@test.com
+  email: replaceme@host.com
   password: replaceme
 
   ## set this value to an existingSecret name to create the admin user with the password in the secret
@@ -22,27 +22,27 @@ global:
 
 images:
   sentry:
-    repository: quay.io/ukhomeofficedigital/sentry-sentry
-    tag: latest
+    repository: quay.io/s_block/sentry-sentry
+    tag: "latest"
     # pullPolicy: IfNotPresent
     imagePullSecrets: []
   snuba:
-    repository: quay.io/ukhomeofficedigital/sentry-snuba
-    tag: latest
+    repository: quay.io/s_block/sentry-snuba
+    tag: "latest"
     # repository: getsentry/snuba
     # tag: Chart.AppVersion
     # pullPolicy: IfNotPresent
     imagePullSecrets: []
   relay:
-    repository: quay.io/ukhomeofficedigital/sentry-relay
-    tag: latest
+    repository: quay.io/s_block/sentry-relay
+    tag: "latest"
     # repository: getsentry/relay
     # tag: Chart.AppVersion
     # pullPolicy: IfNotPresent
     imagePullSecrets: []
   symbolicator:
-    repository: quay.io/ukhomeofficedigital/sentry-symbolicator
-    tag: latest
+    repository: quay.io/s_block/sentry-symbolicator
+    tag: "latest"
     # repository: getsentry/symbolicator
     # tag: 0.5.1
     # pullPolicy: IfNotPresent
@@ -70,7 +70,13 @@ relay:
   probePeriodSeconds: 10
   probeSuccessThreshold: 1
   probeTimeoutSeconds: 2
-  resources: {}
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 1
+      memory: 1Gi
   affinity: {}
   nodeSelector: {}
   securityContext:
@@ -118,7 +124,13 @@ sentry:
     probePeriodSeconds: 60
     probeSuccessThreshold: 1
     probeTimeoutSeconds: 60
-    resources: {}
+    resources:
+      limits:
+        cpu: 1
+        memory: 4Gi
+      requests:
+        cpu: 1
+        memory: 4Gi
     affinity: {}
     nodeSelector: {}
     securityContext:
@@ -148,17 +160,17 @@ sentry:
 
   worker:
     replicas: 1
-    # concurrency: 4
+    #    concurrency: 4
     env:
       - name: REDIS_PORT
         value: "6379"
     resources:
       limits:
-        cpu: 400m
-        memory: 2Gi
+        cpu: 2
+        memory: 6Gi
       requests:
-        cpu: 400m
-        memory: 2Gi
+        cpu: 2
+        memory: 6Gi
     affinity: {}
     nodeSelector: {}
     # tolerations: []
@@ -591,15 +603,15 @@ snuba:
 hooks:
   enabled: true
   removeOnSuccess: true
-  activeDeadlineSeconds: 100
+  activeDeadlineSeconds: 600
   shareProcessNamespace: false
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
   dbCheck:
     image:
-      repository: quay.io/ukhomeofficedigital/netcat
-      tag: latest
+      repository: quay.io/s_block/netcat
+      tag: "latest"
       pullPolicy: IfNotPresent
       imagePullSecrets: []
     env:
@@ -735,7 +747,7 @@ slack: {}
 #   Reference -> https://develop.sentry.dev/integrations/slack/
 
 nginx:
-  enabled: false
+  enabled: true
   containerPort: 8080
   existingServerBlockConfigmap: '{{ template "sentry.fullname" . }}'
   resources: {}
@@ -744,31 +756,45 @@ nginx:
     type: ClusterIP
     ports:
       http: 80
+  image:
+    registry: quay.io
+    repository: s_block/sentry-nginx
+    tag: "latest"
+  command: ['nginx']
+  args: ['-g', 'daemon off;']
+  # docker.io/bitnami/nginx:1.23.3-debian-11-r8
+  # quay.io/s_block/sentry-nginx:latest
   ## Use this to enable an extra service account
   # serviceAccount:
   #   create: false
   #   name: nginx
 
 ingress:
-  enabled: false
+  enabled: true
   # If you are using traefik ingress controller, switch this to 'traefik'
   # if you are using AWS ALB Ingress controller, switch this to 'aws-alb'
   # if you are using GKE Ingress controller, switch this to 'gke'
-  regexPathStyle: nginx
+  regexPathStyle: ngin
   # If you are using AWS ALB Ingress controller, switch to true if you want activate the http to https redirection.
   alb:
     httpRedirect: false
-  # annotations:
-  #   If you are using nginx ingress controller, please use at least those 2 annotations
-  #   kubernetes.io/ingress.class: nginx
-  #   nginx.ingress.kubernetes.io/use-regex: "true"
-  #
-  # hostname:
-  # additionalHostNames: []
-  #
-  # tls:
-  # - secretName:
-  #   hosts:
+
+  labels:
+    cert-manager.io/solver: http01
+  annotations:
+    cert-manager.io/enabled: "true"
+    ingress.kubernetes.io/force-ssl-redirect: "true"
+    kubernetes.io/ingress.class: "nginx-external"
+    kubernetes.io/tls-acme: "true"
+    ingress.kubernetes.io/whitelist-source-range: 0.0.0.0\0
+    ingress.kubernetes.io/use-regex: "true"
+
+  hostname: sentry.local
+
+  tls:
+    - secretName: sentry-tls-cmio
+      hosts:
+        - sentry.local
 
 filestore:
   # Set to one of filesystem, gcs or s3 as supported by Sentry.
@@ -811,7 +837,7 @@ filestore:
     ## Point this at a pre-configured secret containing a service account. The resulting
     ## secret will be mounted at /var/run/secrets/google
     # secretName:
-    # credentialsFile: credentials.json
+  # credentialsFile: credentials.json
   # bucketName:
 
   ## Currently unconfigured and changing this has no impact on the template configuration.
@@ -829,21 +855,32 @@ config:
   configYml: {}
   sentryConfPy: |
     # No Python Extension Config Given
+    # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # SESSION_COOKIE_SECURE = True
+    # CSRF_COOKIE_SECURE = True
+    # SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    CSRF_TRUSTED_ORIGINS = ['http://localhost', 'http://sentry-web', 'http://sentry-relay', 'http://sentry-nginx', 'https://sentry.s-block.com']
+    SENTRY_OPTIONS['system.url-prefix'] = 'https://sentry.s-block.com'
+    SENTRY_FEATURES['organizations:sso-saml2'] = True
   snubaSettingsPy: |
     # No Python Extension Config Given
   relay: |
     # No YAML relay config given
+    http:
+      _client: "reqwest"
   web:
     httpKeepalive: 15
 
 clickhouse:
   enabled: true
   clickhouse:
-    image: "quay.io/ukhomeofficedigital/clickouse-server"
+    image: "quay.io/s_block/clickhouse-server"
     imageVersion: "latest"
     imagePullPolicy: Always
     init:
-      image: "quay.io/ukhomeofficedigital/busybox"
+      image: "quay.io/s_block/busybox"
       imageVersion: "latest"
     replicas: 1
     configmap:
@@ -896,7 +933,7 @@ clickhouse:
         accessModes:
           - "ReadWriteOnce"
         storage: "10Gi"
-#        storage: "30Gi"
+    #        storage: "30Gi"
     livenessProbe:
       enabled: false
     readinessProbe:
@@ -908,8 +945,8 @@ zookeeper:
   enabled: true
   image:
     registry: quay.io
-    repository: ukhomeofficedigital/clickhouse-zookeeper
-    tag: latest
+    repository: s_block/sentry-zookeeper
+    tag: "latest"
   nameOverride: zookeeper-clickhouse
   replicaCount: 1
   resources:
@@ -926,8 +963,8 @@ kafka:
   enabled: true
   image:
     registry: quay.io
-    repository: ukhomeofficedigital/sentry-kafka
-    tag: latest
+    repository: s_block/sentry-kafka
+    tag: "latest"
   replicaCount: 1
   allowPlaintextListener: true
   defaultReplicationFactor: 1
@@ -955,8 +992,8 @@ kafka:
     enabled: true
     image:
       registry: quay.io
-      repository: ukhomeofficedigital/sentry-zookeeper
-      tag: latest
+      repository: s_block/sentry-zookeeper
+      tag: "latest"
     resources:
       limits:
         cpu: 800m
@@ -982,8 +1019,44 @@ externalKafka:
 sourcemaps:
   enabled: false
 
+# https://github.com/bitnami/charts/tree/master/bitnami/redis
 redis:
-  enabled: false
+  enabled: true
+  image:
+    registry: quay.io
+    repository: s_block/sentry-redis
+    tag: latest
+  auth:
+    enabled: false
+    sentinel: false
+  nameOverride: sentry-redis
+  usePassword: false
+  ## Just omit the password field if your redis cluster doesn't use password
+  # password: redis
+  master:
+    command: [ "redis-server" ]
+    args:  [ "--port", "6379" ]
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+    livenessProbe:
+      enabled: false
+    readinessProbe:
+      enabled: false
+    persistence:
+      enabled: false
+    resources:
+      limits:
+        cpu: 800m
+        memory: 2Gi
+      requests:
+        cpu: 400m
+        memory: 1Gi
+  replica:
+    replicaCount: 0
 
 ## This value is only used when redis.enabled is set to false
 ##
@@ -1001,6 +1074,8 @@ externalPostgresql:
   port: 5432
   username: sentry
   database: sentry
+#  existingSecret: name-of-existing-secret
+#  existingSecretKey: key-of-secret
 
 rabbitmq:
   ## If disabled, Redis will be used instead as the broker.
