@@ -1,4 +1,4 @@
-FROM quay.io/s_block/python-alpine:gcc-musl
+FROM python:3.10-alpine
 
 RUN adduser -D -H 1000
 
